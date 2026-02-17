@@ -2,5 +2,3 @@
 __pycache__/
 *.pyc
 .DS_Store
-nginx.conf.template
-run_prod.sh
