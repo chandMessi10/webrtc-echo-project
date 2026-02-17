@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebRTC Audio Echo - Web Tester</title>
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --card-bg: #1e293b;
+            --text-color: #f1f5f9;
+            --accent-color: #38bdf8;
+            --danger-color: #ef4444;
+            --success-color: #22c55e;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            overflow: hidden;
+        }
+
+        .container {
+            background-color: var(--card-bg);
+            padding: 2.5rem;
+            border-radius: 1.5rem;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            text-align: center;
+            width: 90%;
+            max-width: 450px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            transition: transform 0.3s ease;
+        }
+
+        .container:hover {
+            transform: translateY(-5px);
+        }
+
+        h1 {
+            font-size: 1.8rem;
+            margin-bottom: 1.5rem;
+            background: linear-gradient(to right, #38bdf8, #818cf8);
+            background-clip: text;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .status-dot {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background-color: var(--danger-color);
+            margin-right: 8px;
+            box-shadow: 0 0 10px var(--danger-color);
+        }
+
+        .status-dot.connected {
+            background-color: var(--success-color);
+            box-shadow: 0 0 10px var(--success-color);
+        }
+
+        #status {
+            font-size: 0.9rem;
+            color: #94a3b8;
+            margin-bottom: 2rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        button {
+            background-color: var(--accent-color);
+            color: var(--bg-color);
+            border: none;
+            padding: 1rem 2rem;
+            font-size: 1rem;
+            font-weight: 600;
+            border-radius: 0.75rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            width: 100%;
+            margin-bottom: 1rem;
+            box-shadow: 0 10px 15px -3px rgba(56, 189, 248, 0.3);
+        }
+
+        button:hover {
+            filter: brightness(1.1);
+            transform: scale(1.02);
+        }
+
+        button:active {
+            transform: scale(0.98);
+        }
+
+        button:disabled {
+            background-color: #475569;
+            cursor: not-allowed;
+            box-shadow: none;
+        }
+
+        #stop-btn {
+            background-color: transparent;
+            border: 2px solid var(--danger-color);
+            color: var(--danger-color);
+            box-shadow: none;
+        }
+
+        #stop-btn:hover {
+            background-color: var(--danger-color);
+            color: var(--text-color);
+        }
+
+        .visualizer {
+            height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+            margin: 2rem 0;
+        }
+
+        .bar {
+            width: 4px;
+            background-color: var(--accent-color);
+            border-radius: 4px;
+            height: 10px;
+            transition: height 0.1s ease;
+        }
+
+        .instructions {
+            font-size: 0.8rem;
+            color: #64748b;
+            margin-top: 1.5rem;
+            line-height: 1.5;
+        }
+
+        audio {
+            display: none;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>Echo Tester</h1>
+
+        <div id="status">
+            <span class="status-dot" id="dot"></span>
+            <span id="status-text">Disconnected</span>
+        </div>
+
+        <div class="visualizer" id="visualizer">
+            <div class="bar"></div>
+            <div class="bar"></div>
+            <div class="bar"></div>
+            <div class="bar"></div>
+            <div class="bar"></div>
+            <div class="bar"></div>
+            <div class="bar"></div>
+            <div class="bar"></div>
+        </div>
+
+        <button id="start-btn">Start Audio Echo</button>
+        <button id="stop-btn" style="display: none;">Stop Echo</button>
+
+        <p class="instructions">
+            This demo captures your microphone and echoes it back via the FastAPI backend.<br>
+            Ensure the backend is running at <code>localhost:8000</code>.
+        </p>
+    </div>
+
+    <audio id="remote-audio" autoplay></audio>
+
+    <script>
+        const startBtn = document.getElementById('start-btn');
+        const stopBtn = document.getElementById('stop-btn');
+        const statusText = document.getElementById('status-text');
+        const statusDot = document.getElementById('dot');
+        const remoteAudio = document.getElementById('remote-audio');
+        const bars = document.querySelectorAll('.bar');
+
+        let pc = null;
+        let localStream = null;
+
+        async function start() {
+            startBtn.disabled = true;
+            statusText.innerText = 'Connecting...';
+
+            try {
+                // 1. Get user media
+                localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+                // 2. Setup RTCPeerConnection
+                pc = new RTCPeerConnection({
+                    iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+                });
+
+                // Handle remote track
+                pc.ontrack = (event) => {
+                    if (event.track.kind === 'audio') {
+                        remoteAudio.srcObject = event.streams[0];
+                    }
+                };
+
+                pc.onconnectionstatechange = () => {
+                    console.log('State:', pc.connectionState);
+                    if (pc.connectionState === 'connected') {
+                        statusText.innerText = 'Connected - Echoing';
+                        statusDot.classList.add('connected');
+                        startBtn.style.display = 'none';
+                        stopBtn.style.display = 'block';
+                        startVisualizer();
+                    } else if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
+                        stop();
+                    }
+                };
+
+                // Add local tracks
+                localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+
+                // 3. Create Offer
+                const offer = await pc.createOffer();
+                await pc.setLocalDescription(offer);
+
+                // 4. Send to Signaling Server
+                const response = await fetch('http://localhost:8000/offer', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        sdp: pc.localDescription.sdp,
+                        type: pc.localDescription.type
+                    }),
+                    headers: { 'Content-Type': 'application/json' }
+                });
+
+                const answer = await response.json();
+                await pc.setRemoteDescription(new RTCSessionDescription(answer));
+
+            } catch (err) {
+                console.error(err);
+                alert('Connection failed: ' + err.message);
+                stop();
+            }
+        }
+
+        function stop() {
+            if (pc) {
+                pc.close();
+                pc = null;
+            }
+            if (localStream) {
+                localStream.getTracks().forEach(track => track.stop());
+                localStream = null;
+            }
+            startBtn.disabled = false;
+            startBtn.style.display = 'block';
+            stopBtn.style.display = 'none';
+            statusText.innerText = 'Disconnected';
+            statusDot.classList.remove('connected');
+            stopVisualizer();
+        }
+
+        let visualizerInterval;
+        function startVisualizer() {
+            visualizerInterval = setInterval(() => {
+                bars.forEach(bar => {
+                    const height = Math.random() * 50 + 10;
+                    bar.style.height = `${height}px`;
+                });
+            }, 100);
+        }
+
+        function stopVisualizer() {
+            clearInterval(visualizerInterval);
+            bars.forEach(bar => bar.style.height = '10px');
+        }
+
+        startBtn.onclick = start;
+        stopBtn.onclick = stop;
+    </script>
+</body>
+
+</html>
