@@ -36,10 +36,18 @@ async def index():
     with open("index.html", "r") as f:
         return f.read()
 
+from pydantic import BaseModel
+
+class Offer(BaseModel):
+    sdp: str
+    type: str
+
 @app.post("/offer")
-async def offer(request: Request):
-    params = await request.json()
-    offer = RTCSessionDescription(sdp=params["sdp"], type=params["type"])
+async def offer(params: Offer):
+    try:
+        offer = RTCSessionDescription(sdp=params.sdp, type=params.type)
+    except Exception as e:
+        return {"error": f"Invalid SDP offer: {str(e)}"}, 400
 
     pc = RTCPeerConnection()
     pcs.add(pc)
