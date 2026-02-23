@@ -7,7 +7,7 @@ A production-ready WebRTC signaling and audio echo backend.
 2. `source .venv/bin/activate`
 3. `pip install -r requirements.txt`
 4. `python main.py`
-5. Visit `http://localhost:8000`
+5. Visit `http://127.0.0.1:8000`
 
 ## Production Deployment
 See `walkthrough.md` for the Kamatera Cloud Console guide.
